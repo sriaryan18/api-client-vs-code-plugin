@@ -2,7 +2,7 @@
   "name": "api-client",
   "displayName": "API Client",
   "description": "A local, file-first API client for VS Code. Import curl, manage collections, send requests.",
-  "version": "0.6.4",
+  "version": "0.6.6",
   "publisher": "local",
   "engines": {
     "vscode": "^1.90.0"
@@ -157,6 +157,14 @@
         "title": "API Client: Delete Folder"
       },
       {
+        "command": "apiClient.rename",
+        "title": "API Client: Rename"
+      },
+      {
+        "command": "apiClient.move",
+        "title": "API Client: Move"
+      },
+      {
         "command": "apiClient.runCollection",
         "title": "API Client: Run Collection",
         "icon": "$(play)"
@@ -278,6 +286,11 @@
         "command": "apiClient.searchRequests",
         "key": "ctrl+alt+f",
         "mac": "cmd+alt+f"
+      },
+      {
+        "command": "apiClient.rename",
+        "key": "f2",
+        "when": "view == apiClient.collections && viewItem =~ /collection|folder|request/"
       },
       {
         "command": "apiClient.editEnv",
@@ -408,6 +421,16 @@
         {
           "command": "apiClient.newRequest",
           "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.rename",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder|request/",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.move",
+          "when": "view == apiClient.collections && viewItem =~ /folder|request/",
           "group": "1_edit"
         },
         {

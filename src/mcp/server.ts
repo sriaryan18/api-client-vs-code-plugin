@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as fs from "fs";
-import { emptyRequest, FlowStep, isHttpMethod } from "../models";
+import { emptyBody, emptyRequest, EnvScope, FlowStep, isHttpMethod } from "../models";
 import { formatFlowRun, runFlow } from "../runner/runFlow";
 import { runOneRequest } from "../runner/runOne";
 import { FileStore } from "../storage/fileStore";
@@ -289,13 +289,13 @@ function toolList() {
     {
       name: "list_env",
       description:
-        "List environment scopes and their keys: global, profiles, and collections.",
+        "List environment scopes and their keys: global, local secrets, profiles, and collections.",
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "get_env",
       description:
-        "Read env values. scope is global, profile, or collection. name is the profile or collection.",
+        "Read env values. scope is global, profile, collection, or secrets. name is the profile or collection.",
       inputSchema: {
         type: "object",
         properties: {
@@ -308,7 +308,7 @@ function toolList() {
     {
       name: "set_env",
       description:
-        "Add or edit one env variable. scope is global, profile, or collection.",
+        "Add or edit one env variable. scope is global, profile, collection, or secrets.",
       inputSchema: {
         type: "object",
         properties: {
@@ -380,7 +380,7 @@ async function runTool(
         request.description = String(args.description);
       }
       if (args.body) {
-        request.body = { mode: "json", raw: String(args.body) };
+        request.body = { ...emptyBody(), mode: "json", raw: String(args.body) };
       }
       if (!request.name) {
         Object.assign(request, emptyRequest(requestName));
@@ -460,6 +460,7 @@ async function runTool(
     case "list_env":
       return {
         global: Object.keys(store.readGlobalEnv().values),
+        secrets: Object.keys(store.readSecrets().values),
         profiles: store.listNamedEnvironments().map((env) => ({
           name: env.name,
           keys: Object.keys(env.values),
@@ -511,19 +512,23 @@ async function runTool(
   }
 }
 
-function parseScope(raw: unknown): "global" | "profile" | "collection" {
+function parseScope(raw: unknown): EnvScope {
   const value = String(raw || "profile").toLowerCase();
   switch (value) {
     case "global":
       return "global";
     case "collection":
       return "collection";
+    case "secrets":
+    case "secret":
+    case "local":
+      return "secrets";
     case "profile":
     case "named":
     case "env":
       return "profile";
     default:
-      throw new Error("scope must be global, profile, or collection");
+      throw new Error("scope must be global, profile, collection, or secrets");
   }
 }
 

@@ -374,6 +374,74 @@ h3, .label {
   border-radius: 3px;
 }
 
+.code-view {
+  background: color-mix(in srgb, var(--input) 70%, var(--bg));
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 16px var(--pad);
+}
+
+.tok-key { color: #7dd3fc; }
+.tok-str { color: #86efac; }
+.tok-num { color: #fbbf24; }
+.tok-bool { color: #c084fc; }
+.tok-null { color: #f472b6; }
+.tok-kw { color: #818cf8; }
+.tok-fn { color: #38bdf8; }
+.tok-cm { color: #64748b; font-style: italic; }
+.tok-punc { color: #94a3b8; }
+.tok-var { color: #f59e0b; }
+.tok-err { color: #f87171; }
+
+.tests-view {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.test-empty {
+  color: var(--muted);
+  padding: 18px 4px;
+}
+
+.test-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.test-row.ok {
+  border-color: color-mix(in srgb, var(--get) 45%, var(--border));
+}
+
+.test-row.bad {
+  border-color: color-mix(in srgb, var(--delete) 55%, var(--border));
+}
+
+.test-mark {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+
+.test-row.ok .test-mark { color: var(--get); }
+.test-row.bad .test-mark { color: var(--delete); }
+
+.test-name { font-weight: 650; }
+
+.test-err {
+  margin-top: 4px;
+  color: #f87171;
+  font-family: var(--vscode-editor-font-family, ui-monospace, Menlo, monospace);
+  font-size: 12px;
+}
+
 .suggest, .env-tip {
   position: fixed;
   z-index: 30;
@@ -464,8 +532,35 @@ h3, .label {
 }
 
 #tab-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#body-raw,
+#body-graphql,
+#body-multipart {
+  flex: 1;
+  min-height: 0;
+}
+
+.gql {
+  display: grid;
+  grid-template-rows: minmax(140px, 1fr) 140px;
+  gap: 10px;
+}
+
+.gql label {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.part-row {
+  grid-template-columns: 22px minmax(90px, 1fr) 84px minmax(120px, 1.6fr) auto 32px;
 }
 
 textarea {

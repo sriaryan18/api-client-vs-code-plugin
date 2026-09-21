@@ -19,7 +19,11 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<EnvNode> {
     const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
     item.contextValue = "environment";
     item.iconPath = new vscode.ThemeIcon(
-      element.target.kind === "collection" ? "folder" : "symbol-variable"
+      element.target.kind === "collection"
+        ? "folder"
+        : element.target.kind === "secrets"
+          ? "lock"
+          : "symbol-variable"
     );
     item.command = {
       command: "apiClient.openEnv",
@@ -35,6 +39,9 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<EnvNode> {
         break;
       case "collection":
         item.description = "collection";
+        break;
+      case "secrets":
+        item.description = "not in git";
         break;
       default: {
         const _never: never = element.target;
@@ -53,6 +60,7 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<EnvNode> {
     store.ensureLayout();
     const nodes: EnvNode[] = [
       { label: "Global", target: { kind: "global" } },
+      { label: "Local secrets", target: { kind: "secrets" } },
       ...store.listNamedEnvironments().map((env) => ({
         label: env.name,
         target: { kind: "named" as const, name: env.name },

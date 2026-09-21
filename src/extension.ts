@@ -13,6 +13,7 @@ import {
   isCollectionVisible,
   setCollectionShown,
   setVisibleCollectionNames,
+  renameVisibleCollection,
   toggleCollectionVisibility,
   visibleCollectionNames,
 } from "./storage/visibility";
@@ -23,6 +24,7 @@ import {
   RequestNode,
   TreeNode,
 } from "./tree/collectionTree";
+import { createCollectionDrag } from "./tree/collectionDrag";
 import { FlowNode, FlowTreeProvider } from "./tree/flowTree";
 import { EnvTreeProvider } from "./tree/envTree";
 import {
@@ -106,6 +108,14 @@ export function activate(context: vscode.ExtensionContext): void {
       (node?: TreeNode) => deleteCollectionOrFolder(tree, node)
     ),
     vscode.commands.registerCommand(
+      "apiClient.rename",
+      (node?: TreeNode) => renameNode(tree, panel, node)
+    ),
+    vscode.commands.registerCommand(
+      "apiClient.move",
+      (node?: TreeNode) => moveNode(tree, panel, node)
+    ),
+    vscode.commands.registerCommand(
       "apiClient.runCollection",
       (node?: TreeNode) => runCollectionCommand(tree, panel, output, node)
     ),
@@ -148,6 +158,7 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: tree,
     showCollapseAll: true,
     canSelectMany: true,
+    dragAndDropController: createCollectionDrag(tree, panel),
   });
   const visView = vscode.window.createTreeView("apiClient.visibility", {
     treeDataProvider: visTree,
@@ -602,6 +613,99 @@ async function duplicateRequest(
     fileName: path.basename(filePath),
     filePath,
   });
+}
+
+async function renameNode(
+  tree: CollectionTreeProvider,
+  panel: RequestPanel,
+  node?: TreeNode
+): Promise<void> {
+  const store = await requireStore();
+  if (!store || !node) {
+    return;
+  }
+  const current =
+    node.kind === "request" ? store.readRequest(node.filePath).name : node.name;
+  const name = await vscode.window.showInputBox({
+    prompt: "New name",
+    value: current,
+  });
+  if (!name || name === current) {
+    return;
+  }
+  try {
+    switch (node.kind) {
+      case "collection": {
+        const oldDir = store.resolve(node.relPath);
+        const next = store.renameFolder(node.relPath, name);
+        await renameVisibleCollection(node.name, path.basename(next));
+        panel.retargetUnder(oldDir, store.resolve(next));
+        break;
+      }
+      case "folder": {
+        const oldDir = store.resolve(node.relPath);
+        const next = store.renameFolder(node.relPath, name);
+        panel.retargetUnder(oldDir, store.resolve(next));
+        break;
+      }
+      case "request": {
+        const oldPath = node.filePath;
+        const filePath = store.renameRequest(node.filePath, name);
+        panel.retargetUnder(oldPath, filePath);
+        break;
+      }
+      default: {
+        const _never: never = node;
+        void _never;
+      }
+    }
+  } catch (error) {
+    await vscode.window.showErrorMessage(
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  tree.refresh();
+}
+
+async function moveNode(
+  tree: CollectionTreeProvider,
+  panel: RequestPanel,
+  node?: TreeNode
+): Promise<void> {
+  const store = await requireStore();
+  if (!store || !node || node.kind === "collection") {
+    return;
+  }
+  const current = node.kind === "request" ? node.relDir : node.relPath;
+  const picked = await vscode.window.showQuickPick(
+    store
+      .listMoveTargets()
+      .filter((entry) => entry.relPath !== current && !entry.relPath.startsWith(`${current}/`))
+      .map((entry) => ({
+        label: entry.relPath,
+        relPath: entry.relPath,
+      })),
+    { placeHolder: "Move into which folder?" }
+  );
+  if (!picked) {
+    return;
+  }
+  try {
+    if (node.kind === "folder") {
+      const oldDir = store.resolve(node.relPath);
+      const next = store.moveFolder(node.relPath, picked.relPath);
+      panel.retargetUnder(oldDir, store.resolve(next));
+    } else {
+      const oldPath = node.filePath;
+      const filePath = store.moveRequest(node.filePath, picked.relPath);
+      panel.retargetUnder(oldPath, filePath);
+    }
+  } catch (error) {
+    await vscode.window.showErrorMessage(
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  tree.refresh();
 }
 
 async function deleteRequest(

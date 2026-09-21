@@ -4,13 +4,18 @@ import {
   ApiFlow,
   ApiRequest,
   authFromUnknown,
+  emptyBody,
   emptyFlow,
   emptyRequest,
   EnvironmentFile,
+  EnvScope,
+  FlowStep,
   flowFromUnknown,
   HeaderPair,
+  isBodyMode,
   isHttpMethod,
   pairsFromUnknown,
+  partsFromUnknown,
   RequestAuth,
 } from "../models";
 import {
@@ -24,6 +29,8 @@ import {
   GLOBAL_ENV_NAME,
   joinRel,
   META_JSON_FILES,
+  SECRETS_FILE,
+  SECRETS_GITIGNORE,
   slugify,
 } from "./pathUtils";
 
@@ -63,6 +70,8 @@ export class FileStore {
       baseUrl: "http://localhost:3000",
     });
     this.ensureEnvFile(this.namedEnvPath("local"), "local", {});
+    this.ensureEnvFile(this.secretsPath(), "secrets", {});
+    this.ensureSecretsGitignore();
     if (!fs.existsSync(this.defaultsPath())) {
       this.writeDefaultHeaders([
         { key: "Accept", value: "application/json", enabled: true },
@@ -162,6 +171,145 @@ export class FileStore {
     }
   }
 
+  renameFolder(relPath: string, newName: string): string {
+    const parent = relPath.split("/").slice(0, -1).join("/");
+    const dest = joinRel(parent, slugify(newName));
+    this.assertInside(relPath);
+    if (dest !== relPath && fs.existsSync(this.resolve(dest))) {
+      throw new Error("A folder with that name already exists.");
+    }
+    if (dest !== relPath) {
+      fs.renameSync(this.resolve(relPath), this.resolve(dest));
+      this.rewriteFlowFolders(relPath, dest);
+    }
+    return dest;
+  }
+
+  moveFolder(relPath: string, destParent: string): string {
+    const base = relPath.split("/").filter(Boolean).pop() || "";
+    const dest = joinRel(destParent, base);
+    this.assertInside(relPath);
+    if (dest === relPath) {
+      return relPath;
+    }
+    if (dest === relPath || dest.startsWith(`${relPath}/`)) {
+      throw new Error("Cannot move a folder into itself.");
+    }
+    if (fs.existsSync(this.resolve(dest))) {
+      throw new Error("That name is already used there.");
+    }
+    fs.mkdirSync(this.resolve(destParent) || this.collectionsPath(), { recursive: true });
+    fs.renameSync(this.resolve(relPath), this.resolve(dest));
+    this.rewriteFlowFolders(relPath, dest);
+    return dest;
+  }
+
+  renameRequest(filePath: string, newName: string): string {
+    const request = this.readRequest(filePath);
+    const oldFolder = this.requestFolder(filePath);
+    const oldName = request.name;
+    request.name = newName.trim() || request.name;
+    const dest = path.join(path.dirname(filePath), `${slugify(request.name)}.json`);
+    if (dest !== filePath && fs.existsSync(dest)) {
+      throw new Error("A request with that file name already exists.");
+    }
+    this.writeRequest(dest, request);
+    if (dest !== filePath) {
+      fs.unlinkSync(filePath);
+      this.rewriteFlowSteps(oldFolder, oldName, this.requestFolder(dest), request.name);
+    }
+    return dest;
+  }
+
+  moveRequest(filePath: string, destRel: string): string {
+    if (!destRel) {
+      throw new Error("Pick a collection or folder.");
+    }
+    const request = this.readRequest(filePath);
+    const oldFolder = this.requestFolder(filePath);
+    const dest = path.join(this.resolve(destRel), path.basename(filePath));
+    if (dest === filePath) {
+      return filePath;
+    }
+    if (fs.existsSync(dest)) {
+      throw new Error("A request with that file name already exists there.");
+    }
+    fs.mkdirSync(this.resolve(destRel), { recursive: true });
+    fs.renameSync(filePath, dest);
+    this.rewriteFlowSteps(oldFolder, request.name, this.requestFolder(dest), request.name);
+    return dest;
+  }
+
+  listMoveTargets(): FolderEntry[] {
+    const walk = (relPath: string): FolderEntry[] => {
+      const here = relPath
+        ? [{ name: relPath, relPath }]
+        : [];
+      return [
+        ...here,
+        ...this.listFolders(relPath).flatMap((folder) => walk(folder.relPath)),
+      ];
+    };
+    return walk("");
+  }
+
+  private assertInside(relPath: string): void {
+    const target = this.resolve(relPath);
+    const root = this.collectionsPath();
+    if (!relPath || target === root || !target.startsWith(`${root}${path.sep}`)) {
+      throw new Error("Cannot change that folder.");
+    }
+  }
+
+  private rewriteFlowFolders(from: string, to: string): void {
+    this.rewriteFlows((folder) => {
+      if (folder === from) {
+        return to;
+      }
+      if (folder.startsWith(`${from}/`)) {
+        return `${to}${folder.slice(from.length)}`;
+      }
+      return folder;
+    });
+  }
+
+  private rewriteFlowSteps(
+    oldFolder: string,
+    oldName: string,
+    newFolder: string,
+    newName: string
+  ): void {
+    this.rewriteFlows((folder) => folder, (step) => {
+      if (step.folder === oldFolder && step.name === oldName) {
+        return { ...step, folder: newFolder, name: newName };
+      }
+      return step;
+    });
+  }
+
+  private rewriteFlows(
+    mapFolder: (folder: string) => string,
+    mapStep?: (step: FlowStep) => FlowStep
+  ): void {
+    for (const entry of this.listFlows()) {
+      let dirty = false;
+      const steps = entry.flow.steps.map((step) => {
+        const folder = mapFolder(step.folder);
+        let next: FlowStep = folder === step.folder ? step : { ...step, folder };
+        if (mapStep) {
+          next = mapStep(next);
+        }
+        if (next.folder !== step.folder || next.name !== step.name) {
+          dirty = true;
+        }
+        return next;
+      });
+      if (dirty) {
+        this.writeFlow(entry.filePath, { ...entry.flow, steps });
+      }
+    }
+  }
+
   duplicateRequest(filePath: string): string {
     const request = this.readRequest(filePath);
     request.name = `${request.name} copy`;
@@ -238,7 +386,12 @@ export class FileStore {
     this.ensureLayout();
     return fs
       .readdirSync(this.environmentsPath())
-      .filter((file) => file.endsWith(".json") && file !== `${GLOBAL_ENV_NAME}.json`)
+      .filter(
+        (file) =>
+          file.endsWith(".json") &&
+          file !== `${GLOBAL_ENV_NAME}.json` &&
+          file !== SECRETS_FILE
+      )
       .map((file) =>
         this.readEnvFile(
           path.join(this.environmentsPath(), file),
@@ -247,10 +400,21 @@ export class FileStore {
       );
   }
 
-  envScopeValues(
-    scope: "global" | "profile" | "collection",
-    name = ""
-  ): Record<string, string> {
+  secretsPath(): string {
+    return path.join(this.environmentsPath(), SECRETS_FILE);
+  }
+
+  readSecrets(): EnvironmentFile {
+    this.ensureLayout();
+    return this.readEnvFile(this.secretsPath(), "secrets");
+  }
+
+  writeSecrets(env: EnvironmentFile): void {
+    this.writeEnvFile(this.secretsPath(), { ...env, name: "secrets" });
+    this.ensureSecretsGitignore();
+  }
+
+  envScopeValues(scope: EnvScope, name = ""): Record<string, string> {
     switch (scope) {
       case "global":
         return this.readGlobalEnv().values;
@@ -258,6 +422,8 @@ export class FileStore {
         return this.readNamedEnv(name || "local").values;
       case "collection":
         return this.readCollectionEnv(name).values;
+      case "secrets":
+        return this.readSecrets().values;
       default: {
         const _never: never = scope;
         throw new Error(`Unknown env scope: ${String(_never)}`);
@@ -265,11 +431,7 @@ export class FileStore {
     }
   }
 
-  writeEnvScope(
-    scope: "global" | "profile" | "collection",
-    name: string,
-    values: Record<string, string>
-  ): void {
+  writeEnvScope(scope: EnvScope, name: string, values: Record<string, string>): void {
     switch (scope) {
       case "global":
         this.writeGlobalEnv({ name: "global", values });
@@ -283,6 +445,9 @@ export class FileStore {
         }
         this.writeCollectionEnv(name, { name, values });
         return;
+      case "secrets":
+        this.writeSecrets({ name: "secrets", values });
+        return;
       default: {
         const _never: never = scope;
         throw new Error(`Unknown env scope: ${String(_never)}`);
@@ -291,7 +456,7 @@ export class FileStore {
   }
 
   setEnvValue(
-    scope: "global" | "profile" | "collection",
+    scope: EnvScope,
     name: string,
     key: string,
     value: string
@@ -309,7 +474,7 @@ export class FileStore {
   }
 
   deleteEnvValue(
-    scope: "global" | "profile" | "collection",
+    scope: EnvScope,
     name: string,
     key: string
   ): Record<string, string> {
@@ -359,6 +524,7 @@ export class FileStore {
       ...this.readGlobalEnv().values,
       ...this.readNamedEnv(named).values,
       ...this.readCollectionEnv(collection).values,
+      ...this.readSecrets().values,
     };
   }
 
@@ -377,16 +543,35 @@ export class FileStore {
     if (!Object.keys(changed).length) {
       return;
     }
+    const secretKeys = this.readSecrets().values;
+    const secretChanged: Record<string, string> = {};
+    const rest: Record<string, string> = {};
+    for (const [key, value] of Object.entries(changed)) {
+      if (Object.prototype.hasOwnProperty.call(secretKeys, key)) {
+        secretChanged[key] = value;
+      } else {
+        rest[key] = value;
+      }
+    }
+    if (Object.keys(secretChanged).length) {
+      this.writeSecrets({
+        name: "secrets",
+        values: { ...secretKeys, ...secretChanged },
+      });
+    }
+    if (!Object.keys(rest).length) {
+      return;
+    }
     if (collection) {
       const current = this.readCollectionEnv(collection);
       this.writeCollectionEnv(collection, {
         name: collection,
-        values: { ...current.values, ...changed },
+        values: { ...current.values, ...rest },
       });
       return;
     }
     const current = this.readNamedEnv(named);
-    this.writeNamedEnv({ name: named, values: { ...current.values, ...changed } });
+    this.writeNamedEnv({ name: named, values: { ...current.values, ...rest } });
   }
 
   listFlows(): Array<{ name: string; filePath: string; flow: ApiFlow }> {
@@ -545,6 +730,20 @@ export class FileStore {
       this.writeEnvFile(filePath, { name, values });
     }
   }
+
+  private ensureSecretsGitignore(): void {
+    const filePath = path.join(this.root, ".gitignore");
+    const line = SECRETS_GITIGNORE;
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, `${line}\n`);
+      return;
+    }
+    const text = fs.readFileSync(filePath, "utf8");
+    if (text.split(/\r?\n/).some((row) => row.trim() === line)) {
+      return;
+    }
+    fs.appendFileSync(filePath, text.endsWith("\n") ? `${line}\n` : `\n${line}\n`);
+  }
 }
 
 function normalizeRequest(raw: unknown, fallbackName: string): ApiRequest {
@@ -558,7 +757,7 @@ function normalizeRequest(raw: unknown, fallbackName: string): ApiRequest {
     data.scripts && typeof data.scripts === "object"
       ? (data.scripts as Record<string, unknown>)
       : {};
-  const mode = bodyRaw.mode;
+  const mode = String(bodyRaw.mode || "none");
   return {
     name: String(data.name || fallbackName),
     description: String(data.description ?? ""),
@@ -567,11 +766,12 @@ function normalizeRequest(raw: unknown, fallbackName: string): ApiRequest {
     query: pairsFromUnknown(data.query),
     headers: pairsFromUnknown(data.headers),
     body: {
-      mode:
-        mode === "json" || mode === "text" || mode === "form" || mode === "none"
-          ? mode
-          : "none",
+      ...emptyBody(),
+      mode: isBodyMode(mode) ? mode : "none",
       raw: String(bodyRaw.raw ?? ""),
+      graphqlQuery: String(bodyRaw.graphqlQuery ?? ""),
+      graphqlVariables: String(bodyRaw.graphqlVariables ?? "{}"),
+      parts: partsFromUnknown(bodyRaw.parts),
     },
     scripts: {
       pre: String(scriptsRaw.pre ?? ""),

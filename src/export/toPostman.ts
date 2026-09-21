@@ -72,33 +72,70 @@ function requestToItem(request: ApiRequest): Record<string, unknown> {
 }
 
 function bodyFrom(request: ApiRequest): { body?: Record<string, unknown> } {
-  if (request.body.mode === "none" || !request.body.raw) {
-    return {};
+  switch (request.body.mode) {
+    case "none":
+      return {};
+    case "form":
+      if (!request.body.raw) {
+        return {};
+      }
+      return {
+        body: {
+          mode: "urlencoded",
+          urlencoded: request.body.raw.split("&").map((part) => {
+            const split = part.indexOf("=");
+            return {
+              key: split === -1 ? part : part.slice(0, split),
+              value: split === -1 ? "" : part.slice(split + 1),
+            };
+          }),
+        },
+      };
+    case "graphql":
+      return {
+        body: {
+          mode: "graphql",
+          graphql: {
+            query: request.body.graphqlQuery,
+            variables: request.body.graphqlVariables,
+          },
+        },
+      };
+    case "multipart":
+      return {
+        body: {
+          mode: "formdata",
+          formdata: request.body.parts
+            .filter((part) => part.key.trim())
+            .map((part) => ({
+              key: part.key,
+              value: part.kind === "file" ? undefined : part.value,
+              src: part.kind === "file" ? part.value : undefined,
+              type: part.kind === "file" ? "file" : "text",
+              disabled: !part.enabled,
+            })),
+        },
+      };
+    case "json":
+    case "text":
+      if (!request.body.raw) {
+        return {};
+      }
+      return {
+        body: {
+          mode: "raw",
+          raw: request.body.raw,
+          options:
+            request.body.mode === "json"
+              ? { raw: { language: "json" } }
+              : undefined,
+        },
+      };
+    default: {
+      const _never: never = request.body.mode;
+      return _never;
+    }
   }
-  if (request.body.mode === "form") {
-    return {
-      body: {
-        mode: "urlencoded",
-        urlencoded: request.body.raw.split("&").map((part) => {
-          const split = part.indexOf("=");
-          return {
-            key: split === -1 ? part : part.slice(0, split),
-            value: split === -1 ? "" : part.slice(split + 1),
-          };
-        }),
-      },
-    };
-  }
-  return {
-    body: {
-      mode: "raw",
-      raw: request.body.raw,
-      options:
-        request.body.mode === "json"
-          ? { raw: { language: "json" } }
-          : undefined,
-    },
-  };
 }
 
 function eventsFrom(request: ApiRequest): unknown[] {

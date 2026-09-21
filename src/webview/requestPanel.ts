@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { toCurl } from "../export/toCurl";
 import { prepareRequest } from "../http/prepareRequest";
@@ -8,11 +9,20 @@ import { getStore } from "../storage/workspaceStore";
 import { RequestNode } from "../tree/collectionTree";
 
 interface WebviewMessage {
-  type: "ready" | "save" | "send" | "setEnv" | "copyCurl" | "editEnv" | "saveDefaults";
+  type:
+    | "ready"
+    | "save"
+    | "send"
+    | "setEnv"
+    | "copyCurl"
+    | "editEnv"
+    | "saveDefaults"
+    | "pickFile";
   request?: ApiRequest;
   envName?: string;
   defaultHeaders?: HeaderPair[];
   collectionHeaders?: HeaderPair[];
+  partIndex?: number;
 }
 
 export function multipleTabsEnabled(): boolean {
@@ -77,6 +87,24 @@ export class RequestPanel {
 
   async sendActive(): Promise<void> {
     await this.active?.panel.webview.postMessage({ type: "pleaseSend" });
+  }
+
+  retargetUnder(oldDir: string, newDir: string): void {
+    for (const tab of this.tabs.values()) {
+      const filePath = tab.node.filePath;
+      if (filePath !== oldDir && !filePath.startsWith(`${oldDir}${path.sep}`)) {
+        continue;
+      }
+      const nextPath = `${newDir}${filePath.slice(oldDir.length)}`;
+      const store = getStore();
+      tab.node = {
+        ...tab.node,
+        filePath: nextPath,
+        fileName: path.basename(nextPath),
+        relDir: store?.requestFolder(nextPath) ?? tab.node.relDir,
+        collection: store?.collectionName(store.requestFolder(nextPath)) || tab.node.collection,
+      };
+    }
   }
 
   async copyActiveCurl(): Promise<void> {
@@ -147,6 +175,20 @@ class RequestTab {
       case "editEnv":
         await vscode.commands.executeCommand("apiClient.editEnv");
         break;
+      case "pickFile": {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          title: "Pick a file to upload",
+        });
+        if (picked?.[0]) {
+          await this.panel.webview.postMessage({
+            type: "pickedFile",
+            partIndex: message.partIndex ?? 0,
+            path: picked[0].fsPath,
+          });
+        }
+        break;
+      }
       default: {
         const _never: never = message.type;
         void _never;
@@ -329,6 +371,7 @@ function requestHtml(
         <button type="button" data-tab="auth">Auth</button>
         <button type="button" data-tab="headers">Headers</button>
         <button type="button" data-tab="body">Body</button>
+        <button type="button" data-tab="graphql">GraphQL</button>
         <button type="button" data-tab="scripts">Scripts</button>
       </div>
       <section id="tab-params" class="tab-page">
@@ -392,20 +435,48 @@ function requestHtml(
             <option value="json">JSON</option>
             <option value="text">Text</option>
             <option value="form">Form</option>
+            <option value="graphql">GraphQL</option>
+            <option value="multipart">Multipart / file</option>
           </select>
           <button type="button" id="format-json" class="link">Beautify</button>
         </div>
-        <div class="hl-wrap hl-area">
+        <div id="body-raw" class="hl-wrap hl-area">
           <div class="hl-mirror" id="body-mirror"></div>
           <textarea id="body" placeholder='{ "token": "{{dealerToken}}" }' spellcheck="false"></textarea>
+        </div>
+        <div id="body-graphql" class="hidden gql">
+          <label>Query
+            <div class="hl-wrap hl-area">
+              <div class="hl-mirror" id="gql-query-mirror"></div>
+              <textarea id="gql-query" placeholder="query { me { id } }" spellcheck="false"></textarea>
+            </div>
+          </label>
+          <label>Variables (JSON)
+            <div class="hl-wrap hl-area">
+              <div class="hl-mirror" id="gql-vars-mirror"></div>
+              <textarea id="gql-vars" placeholder='{ "id": "1" }' spellcheck="false"></textarea>
+            </div>
+          </label>
+        </div>
+        <div id="body-multipart" class="hidden">
+          <div class="card">
+            <div class="card-head"><h3>Form fields and files</h3><button type="button" id="add-part" class="link">Add</button></div>
+            <div id="parts" class="pairs"></div>
+          </div>
         </div>
       </section>
       <section id="tab-scripts" class="tab-page hidden scripts">
         <label>Pre-request — before Send
-          <textarea id="pre" placeholder="setEnv('ready', '1')" spellcheck="false"></textarea>
+          <div class="hl-wrap hl-area">
+            <div class="hl-mirror" id="pre-mirror"></div>
+            <textarea id="pre" placeholder="setEnv('ready', '1')" spellcheck="false"></textarea>
+          </div>
         </label>
         <label>Tests — after Send, response is here
-          <textarea id="post" placeholder="setEnv('dealerToken', response.json.access_token)" spellcheck="false"></textarea>
+          <div class="hl-wrap hl-area">
+            <div class="hl-mirror" id="post-mirror"></div>
+            <textarea id="post" placeholder="setEnv('dealerToken', response.json.access_token)" spellcheck="false"></textarea>
+          </div>
         </label>
       </section>
     </section>
@@ -419,9 +490,9 @@ function requestHtml(
           <button type="button" data-restab="tests">Tests</button>
         </div>
       </div>
-      <pre id="res-body" class="res-page"></pre>
-      <pre id="res-headers" class="res-page hidden"></pre>
-      <pre id="res-tests" class="res-page hidden"></pre>
+      <pre id="res-body" class="res-page code-view"></pre>
+      <pre id="res-headers" class="res-page code-view hidden"></pre>
+      <div id="res-tests" class="res-page tests-view hidden"></div>
     </section>
     </div>
     <div id="suggest" class="suggest hidden"></div>

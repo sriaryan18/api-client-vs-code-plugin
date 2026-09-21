@@ -13,8 +13,15 @@ const collectionHeadersEl = document.getElementById("collection-headers");
 const bodyModeEl = document.getElementById("body-mode");
 const bodyEl = document.getElementById("body");
 const bodyMirror = document.getElementById("body-mirror");
+const gqlQueryEl = document.getElementById("gql-query");
+const gqlQueryMirror = document.getElementById("gql-query-mirror");
+const gqlVarsEl = document.getElementById("gql-vars");
+const gqlVarsMirror = document.getElementById("gql-vars-mirror");
+const partsEl = document.getElementById("parts");
 const preEl = document.getElementById("pre");
+const preMirror = document.getElementById("pre-mirror");
 const postEl = document.getElementById("post");
+const postMirror = document.getElementById("post-mirror");
 const sendEl = document.getElementById("send");
 const metaEl = document.getElementById("meta");
 const crumbEl = document.getElementById("crumb");
@@ -61,7 +68,13 @@ function currentRequest() {
     url: urlEl.value,
     query: pairsFrom(queryEl),
     headers: pairsFrom(headersEl),
-    body: { mode: bodyModeEl.value, raw: bodyEl.value },
+    body: {
+      mode: bodyModeEl.value,
+      raw: bodyEl.value,
+      graphqlQuery: gqlQueryEl.value,
+      graphqlVariables: gqlVarsEl.value,
+      parts: partsFrom(partsEl),
+    },
     scripts: { pre: preEl.value, post: postEl.value },
     auth: {
       type: authTypeEl.value,
@@ -114,12 +127,141 @@ function escapeHtml(value) {
 }
 
 function highlightHtml(value) {
-  const escaped = escapeHtml(value || "");
+  return withVars(escapeHtml(value || ""));
+}
+
+function withVars(escaped) {
   return escaped.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (full, key) => {
     const known = Object.prototype.hasOwnProperty.call(envValues, key);
-    const cls = known ? "var-ok" : "var-miss";
-    return `<span class="${cls}">${full}</span>`;
+    return `<span class="${known ? "var-ok" : "var-miss"}">${full}</span>`;
   });
+}
+
+function tok(cls, text) {
+  return `<span class="tok ${cls}">${escapeHtml(text)}</span>`;
+}
+
+function highlightByRules(text, rules) {
+  let out = "";
+  let index = 0;
+  const source = text || "";
+  while (index < source.length) {
+    let hit = null;
+    for (let i = 0; i < rules.length; i += 1) {
+      const rule = rules[i];
+      rule.re.lastIndex = index;
+      const match = rule.re.exec(source);
+      if (match && match.index === index) {
+        hit = { rule, match };
+        break;
+      }
+    }
+    if (!hit) {
+      out += escapeHtml(source[index]);
+      index += 1;
+      continue;
+    }
+    out += hit.rule.cls ? tok(hit.rule.cls, hit.match[0]) : escapeHtml(hit.match[0]);
+    index += hit.match[0].length;
+  }
+  return withVars(out);
+}
+
+function highlightJson(text) {
+  return highlightByRules(text, [
+    { re: /"(?:\\.|[^"\\])*"(?=\s*:)/y, cls: "tok-key" },
+    { re: /"(?:\\.|[^"\\])*"/y, cls: "tok-str" },
+    { re: /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y, cls: "tok-num" },
+    { re: /\b(?:true|false)\b/y, cls: "tok-bool" },
+    { re: /\bnull\b/y, cls: "tok-null" },
+    { re: /[{}\[\],:]/y, cls: "tok-punc" },
+    { re: /\s+/y, cls: "" },
+  ]);
+}
+
+function highlightJs(text) {
+  return highlightByRules(text, [
+    { re: /\/\/[^\n]*/y, cls: "tok-cm" },
+    { re: /\/\*[\s\S]*?\*\//y, cls: "tok-cm" },
+    { re: /`(?:\\.|[^`\\])*`/y, cls: "tok-str" },
+    { re: /'(?:\\.|[^'\\])*'/y, cls: "tok-str" },
+    { re: /"(?:\\.|[^"\\])*"/y, cls: "tok-str" },
+    { re: /\b(?:setEnv|pm|test|expect|response)\b/y, cls: "tok-fn" },
+    { re: /\b(?:const|let|var|function|return|if|else|for|while|of|in|new|typeof|await|async|try|catch|throw|true|false|null|undefined)\b/y, cls: "tok-kw" },
+    { re: /-?\d+(?:\.\d+)?/y, cls: "tok-num" },
+    { re: /[{}\[\]().,;=+\-*/<>!&|?:]/y, cls: "tok-punc" },
+    { re: /\s+/y, cls: "" },
+  ]);
+}
+
+function highlightGraphql(text) {
+  return highlightByRules(text, [
+    { re: /#[^\n]*/y, cls: "tok-cm" },
+    { re: /"(?:\\.|[^"\\])*"/y, cls: "tok-str" },
+    { re: /\b(?:query|mutation|subscription|fragment|on|true|false|null)\b/y, cls: "tok-kw" },
+    { re: /\$[A-Za-z_]\w*/y, cls: "tok-var" },
+    { re: /-?\d+(?:\.\d+)?/y, cls: "tok-num" },
+    { re: /[{}()\[\]!:]/y, cls: "tok-punc" },
+    { re: /\s+/y, cls: "" },
+  ]);
+}
+
+function highlightHeaders(text) {
+  return (text || "")
+    .split("\n")
+    .map((line) => {
+      const split = line.indexOf(":");
+      if (split === -1) {
+        return withVars(escapeHtml(line));
+      }
+      return `${tok("tok-key", line.slice(0, split))}${tok("tok-punc", ":")}${withVars(escapeHtml(line.slice(split + 1)))}`;
+    })
+    .join("\n");
+}
+
+function highlightForm(text) {
+  return highlightByRules(text, [
+    { re: /[^=&\s]+(?==)/y, cls: "tok-key" },
+    { re: /=(?:[^&]*)/y, cls: "tok-str" },
+    { re: /&/y, cls: "tok-punc" },
+    { re: /\s+/y, cls: "" },
+  ]);
+}
+
+function looksJson(text) {
+  const trimmed = (text || "").trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("[");
+}
+
+function highlightCode(text, lang) {
+  switch (lang) {
+    case "json":
+      return highlightJson(text);
+    case "js":
+      return highlightJs(text);
+    case "graphql":
+      return highlightGraphql(text);
+    case "headers":
+      return highlightHeaders(text);
+    case "form":
+      return highlightForm(text);
+    default:
+      return highlightHtml(text);
+  }
+}
+
+function renderTests(tests) {
+  if (!tests.length) {
+    return `<div class="test-empty">No tests. Add them in Scripts.</div>`;
+  }
+  return tests
+    .map((test) => {
+      const cls = test.passed ? "ok" : "bad";
+      const mark = test.passed ? "pass" : "fail";
+      const error = test.error ? `<div class="test-err">${escapeHtml(test.error)}</div>` : "";
+      return `<div class="test-row ${cls}"><span class="test-mark">${mark}</span><div><div class="test-name">${escapeHtml(test.name)}</div>${error}</div></div>`;
+    })
+    .join("");
 }
 
 function showEnvTip(event, key) {
@@ -193,11 +335,32 @@ function bindHighlightWrap(wrap) {
   });
 }
 
+function bodyLang() {
+  switch (bodyModeEl.value) {
+    case "json":
+      return "json";
+    case "form":
+      return "form";
+    case "graphql":
+      return "graphql";
+    default:
+      return "text";
+  }
+}
+
 function paintHighlights() {
   urlMirror.innerHTML = highlightHtml(urlEl.value) || "&nbsp;";
   bindMirrorTips(urlMirror);
-  bodyMirror.innerHTML = highlightHtml(bodyEl.value) || "&nbsp;";
+  bodyMirror.innerHTML = highlightCode(bodyEl.value, bodyLang()) || "&nbsp;";
   bindMirrorTips(bodyMirror);
+  gqlQueryMirror.innerHTML = highlightCode(gqlQueryEl.value, "graphql") || "&nbsp;";
+  gqlVarsMirror.innerHTML = highlightCode(gqlVarsEl.value, "json") || "&nbsp;";
+  preMirror.innerHTML = highlightCode(preEl.value, "js") || "&nbsp;";
+  postMirror.innerHTML = highlightCode(postEl.value, "js") || "&nbsp;";
+  bindMirrorTips(gqlQueryMirror);
+  bindMirrorTips(gqlVarsMirror);
+  bindMirrorTips(preMirror);
+  bindMirrorTips(postMirror);
   document.querySelectorAll(".pair-row .hl-mirror").forEach((mirror) => {
     const input = mirror.parentElement.querySelector(".v");
     if (input) {
@@ -252,12 +415,94 @@ function renderPairs(root, pairs) {
 }
 
 function setReqTab(name) {
-  document.querySelectorAll("#req-tabs button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.tab === name);
-  });
+  if (name === "graphql") {
+    bodyModeEl.value = "graphql";
+    name = "body";
+  }
   ["params", "auth", "headers", "body", "scripts"].forEach((tab) => {
     document.getElementById(`tab-${tab}`).classList.toggle("hidden", tab !== name);
   });
+  markEditorTabs(name);
+  syncBodyUi();
+}
+
+function markEditorTabs(page) {
+  document.querySelectorAll("#req-tabs button").forEach((button) => {
+    const tab = button.dataset.tab;
+    if (tab === "graphql") {
+      button.classList.toggle("active", page === "body" && bodyModeEl.value === "graphql");
+      return;
+    }
+    if (tab === "body") {
+      button.classList.toggle("active", page === "body" && bodyModeEl.value !== "graphql");
+      return;
+    }
+    button.classList.toggle("active", tab === page);
+  });
+}
+
+function syncBodyUi() {
+  const mode = bodyModeEl.value;
+  document.getElementById("body-raw").classList.toggle(
+    "hidden",
+    mode === "none" || mode === "graphql" || mode === "multipart"
+  );
+  document.getElementById("body-graphql").classList.toggle("hidden", mode !== "graphql");
+  document.getElementById("body-multipart").classList.toggle("hidden", mode !== "multipart");
+  document.getElementById("format-json").classList.toggle("hidden", mode !== "json");
+  if (!document.getElementById("tab-body").classList.contains("hidden")) {
+    markEditorTabs("body");
+  }
+}
+
+function partsFrom(root) {
+  return [...root.querySelectorAll(".part-row")].map((row) => ({
+    enabled: row.querySelector("input[type=checkbox]").checked,
+    key: row.querySelector(".k").value,
+    kind: row.querySelector(".kind").value,
+    value: row.querySelector(".v").value,
+  }));
+}
+
+function addPart(root, part) {
+  const row = document.createElement("div");
+  row.className = "pair-row part-row";
+  row.innerHTML = `
+    <input type="checkbox" ${part.enabled !== false ? "checked" : ""} />
+    <input class="k" spellcheck="false" placeholder="Key" />
+    <select class="kind">
+      <option value="text">Text</option>
+      <option value="file">File</option>
+    </select>
+    <input class="v" spellcheck="false" placeholder="Value or file path" />
+    <button type="button" class="link browse">Browse</button>
+    <button type="button" class="icon-btn" title="Remove">×</button>
+  `;
+  row.querySelector(".k").value = part.key || "";
+  row.querySelector(".kind").value = part.kind === "file" ? "file" : "text";
+  row.querySelector(".v").value = part.value || "";
+  row.querySelector(".icon-btn").addEventListener("click", () => {
+    row.remove();
+    scheduleSave();
+  });
+  row.querySelector(".browse").addEventListener("click", () => {
+    vscode.postMessage({
+      type: "pickFile",
+      partIndex: [...root.querySelectorAll(".part-row")].indexOf(row),
+    });
+  });
+  row.querySelectorAll("input, select").forEach((input) => {
+    input.addEventListener("input", scheduleSave);
+    input.addEventListener("change", scheduleSave);
+  });
+  root.appendChild(row);
+}
+
+function renderParts(root, parts) {
+  root.innerHTML = "";
+  (parts && parts.length ? parts : [{ key: "", kind: "text", value: "", enabled: true }]).forEach(
+    (part) => addPart(root, part)
+  );
 }
 
 function setResTab(name) {
@@ -416,6 +661,10 @@ document.getElementById("add-header").addEventListener("click", () => {
   addPair(headersEl, { key: "", value: "", enabled: true });
   scheduleSave();
 });
+document.getElementById("add-part").addEventListener("click", () => {
+  addPart(partsEl, { key: "", kind: "text", value: "", enabled: true });
+  scheduleSave();
+});
 document.getElementById("add-default-header").addEventListener("click", () => {
   addPair(defaultHeadersEl, { key: "", value: "", enabled: true });
   scheduleSave();
@@ -436,10 +685,11 @@ authTypeEl.addEventListener("change", () => {
   scheduleSave();
 });
 
-[urlEl, bodyEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl].forEach(bindEnvHover);
+[urlEl, bodyEl, gqlQueryEl, gqlVarsEl, preEl, postEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl].forEach(bindEnvHover);
 document.querySelectorAll(".hl-wrap").forEach(bindHighlightWrap);
 
-[methodEl, urlEl, nameEl, descriptionEl, bodyModeEl, bodyEl, preEl, postEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl, authAddToEl].forEach((el) => {
+bodyModeEl.addEventListener("change", syncBodyUi);
+[methodEl, urlEl, nameEl, descriptionEl, bodyModeEl, bodyEl, gqlQueryEl, gqlVarsEl, preEl, postEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl, authAddToEl].forEach((el) => {
   el.addEventListener("input", () => {
     scheduleSave();
     if (el === urlEl || el === bodyEl || el.classList.contains("suggest-field")) {
@@ -454,6 +704,17 @@ urlEl.addEventListener("scroll", () => {
 });
 bodyEl.addEventListener("scroll", () => {
   bodyMirror.scrollTop = bodyEl.scrollTop;
+});
+[
+  [gqlQueryEl, gqlQueryMirror],
+  [gqlVarsEl, gqlVarsMirror],
+  [preEl, preMirror],
+  [postEl, postMirror],
+].forEach(([field, mirror]) => {
+  field.addEventListener("scroll", () => {
+    mirror.scrollTop = field.scrollTop;
+    mirror.scrollLeft = field.scrollLeft;
+  });
 });
 envEl.addEventListener("change", () => {
   vscode.postMessage({ type: "setEnv", envName: envEl.value });
@@ -470,6 +731,7 @@ function formatJson() {
     bodyEl.value = JSON.stringify(JSON.parse(bodyEl.value), null, 2);
     bodyModeEl.value = "json";
     scheduleSave();
+    paintHighlights();
   } catch {
     metaEl.textContent = "Body is not valid JSON";
   }
@@ -494,6 +756,15 @@ window.addEventListener("message", (event) => {
     paintHighlights();
     return;
   }
+  if (message.type === "pickedFile") {
+    const row = partsEl.querySelectorAll(".part-row")[message.partIndex];
+    if (row) {
+      row.querySelector(".kind").value = "file";
+      row.querySelector(".v").value = message.path || "";
+      scheduleSave();
+    }
+    return;
+  }
   if (message.type === "load") {
     const request = message.request;
     envValues = message.envValues || {};
@@ -503,6 +774,10 @@ window.addEventListener("message", (event) => {
     urlEl.value = request.url || "";
     bodyModeEl.value = request.body?.mode || "none";
     bodyEl.value = request.body?.raw || "";
+    gqlQueryEl.value = request.body?.graphqlQuery || "";
+    gqlVarsEl.value = request.body?.graphqlVariables || "{}";
+    renderParts(partsEl, request.body?.parts);
+    syncBodyUi();
     preEl.value = request.scripts?.pre || "";
     postEl.value = request.scripts?.post || "";
     fillAuth(request.auth);
@@ -519,9 +794,9 @@ window.addEventListener("message", (event) => {
       envEl.appendChild(option);
     });
     crumbEl.textContent = (message.folder || message.collection || "").replaceAll("/", " / ");
-    resBodyEl.textContent = "";
-    resHeadersEl.textContent = "";
-    resTestsEl.textContent = "";
+    resBodyEl.innerHTML = "";
+    resHeadersEl.innerHTML = "";
+    resTestsEl.innerHTML = "";
     chipEl.className = "chip idle";
     chipEl.textContent = "Idle";
     metaEl.textContent = "";
@@ -538,11 +813,9 @@ window.addEventListener("message", (event) => {
       chipEl.className = "chip err";
       chipEl.textContent = "ERR";
       metaEl.textContent = `${result.timeMs} ms`;
-      resBodyEl.textContent = result.error;
-      resHeadersEl.textContent = "";
-      resTestsEl.textContent = tests.length
-        ? tests.map((test) => `${test.passed ? "ok" : "x"}  ${test.name}${test.error ? ` — ${test.error}` : ""}`).join("\n")
-        : "No tests";
+      resBodyEl.innerHTML = `<span class="tok tok-err">${escapeHtml(result.error)}</span>`;
+      resHeadersEl.innerHTML = "";
+      resTestsEl.innerHTML = renderTests(tests);
       setResTab("body");
       return;
     }
@@ -552,15 +825,16 @@ window.addEventListener("message", (event) => {
     metaEl.textContent = `${result.timeMs} ms · ${sizeLabel(result.sizeBytes)}${
       tests.length ? ` · ${tests.filter((test) => test.passed).length}/${tests.length} tests` : ""
     }`;
-    resBodyEl.textContent = result.body || "";
-    resHeadersEl.textContent = (result.headers || [])
-      .map((header) => `${header.key}: ${header.value}`)
-      .join("\n");
-    resTestsEl.textContent = tests.length
-      ? tests
-          .map((test) => `${test.passed ? "ok" : "x "}  ${test.name}${test.error ? ` — ${test.error}` : ""}`)
-          .join("\n")
-      : "No tests. Add them in Scripts.";
+    resBodyEl.innerHTML = highlightCode(
+      result.body || "",
+      looksJson(result.body) ? "json" : "text"
+    );
+    resHeadersEl.innerHTML = highlightHeaders(
+      (result.headers || [])
+        .map((header) => `${header.key}: ${header.value}`)
+        .join("\n")
+    );
+    resTestsEl.innerHTML = renderTests(tests);
     if (tests.some((test) => !test.passed)) {
       setResTab("tests");
     } else {

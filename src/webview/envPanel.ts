@@ -4,7 +4,8 @@ import { getStore } from "../storage/workspaceStore";
 export type EnvTarget =
   | { kind: "global" }
   | { kind: "named"; name: string }
-  | { kind: "collection"; name: string };
+  | { kind: "collection"; name: string }
+  | { kind: "secrets" };
 
 interface EnvMessage {
   type: "ready" | "save";
@@ -81,6 +82,9 @@ export class EnvPanel {
           values,
         });
         break;
+      case "secrets":
+        store.writeSecrets({ name: "secrets", values });
+        break;
       default: {
         const _never: never = this.target;
         void _never;
@@ -112,6 +116,10 @@ export class EnvPanel {
         title = `Collection · ${this.target.name}`;
         values = store.readCollectionEnv(this.target.name).values;
         break;
+      case "secrets":
+        title = "Local secrets";
+        values = store.readSecrets().values;
+        break;
       default: {
         const _never: never = this.target;
         void _never;
@@ -119,7 +127,11 @@ export class EnvPanel {
       }
     }
     this.panel.title = title;
-    await this.panel.webview.postMessage({ type: "load", title, values });
+    const hint =
+      this.target.kind === "secrets"
+        ? "These win over every other env. This file is git-ignored."
+        : "Secrets win over collection. Collection wins over profile. Profile wins over global.";
+    await this.panel.webview.postMessage({ type: "load", title, values, hint });
   }
 
   private html(webview: vscode.Webview): string {
@@ -146,7 +158,7 @@ export class EnvPanel {
       </div>
     </header>
     <section class="page-body">
-      <p class="crumb">Collection values win over profile values. Profile values win over global.</p>
+      <p class="crumb" id="hint">Secrets win over collection. Collection wins over profile.</p>
       <div class="card">
         <div class="table-head env-row"><span>Key</span><span>Value</span><span></span></div>
         <div id="rows" class="pairs"></div>
@@ -178,6 +190,7 @@ export class EnvPanel {
     window.addEventListener("message", (event) => {
       if (event.data.type !== "load") return;
       document.getElementById("title").textContent = event.data.title;
+      if (event.data.hint) document.getElementById("hint").textContent = event.data.hint;
       rows.innerHTML = "";
       const entries = Object.entries(event.data.values || {});
       (entries.length ? entries : [["", ""]]).forEach(([key, value]) => addRow(key, value));

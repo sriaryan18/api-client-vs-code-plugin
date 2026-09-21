@@ -7,7 +7,9 @@ export type HttpMethod =
   | "HEAD"
   | "OPTIONS";
 
-export type BodyMode = "none" | "json" | "text" | "form";
+export type BodyMode = "none" | "json" | "text" | "form" | "graphql" | "multipart";
+
+export type EnvScope = "global" | "profile" | "collection" | "secrets";
 
 export interface HeaderPair {
   key: string;
@@ -15,9 +17,19 @@ export interface HeaderPair {
   enabled: boolean;
 }
 
+export interface MultipartPart {
+  key: string;
+  kind: "text" | "file";
+  value: string;
+  enabled: boolean;
+}
+
 export interface RequestBody {
   mode: BodyMode;
   raw: string;
+  graphqlQuery: string;
+  graphqlVariables: string;
+  parts: MultipartPart[];
 }
 
 export interface RequestScripts {
@@ -107,6 +119,50 @@ export function emptyPair(): HeaderPair {
   return { key: "", value: "", enabled: true };
 }
 
+export function emptyPart(): MultipartPart {
+  return { key: "", kind: "text", value: "", enabled: true };
+}
+
+export function emptyBody(): RequestBody {
+  return {
+    mode: "none",
+    raw: "",
+    graphqlQuery: "",
+    graphqlVariables: "{}",
+    parts: [emptyPart()],
+  };
+}
+
+export function isBodyMode(value: string): value is BodyMode {
+  switch (value) {
+    case "none":
+    case "json":
+    case "text":
+    case "form":
+    case "graphql":
+    case "multipart":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function partsFromUnknown(raw: unknown): MultipartPart[] {
+  if (!Array.isArray(raw)) {
+    return [emptyPart()];
+  }
+  const parts = raw.map((item): MultipartPart => {
+    const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    return {
+      key: String(row.key ?? ""),
+      kind: row.kind === "file" ? "file" : "text",
+      value: String(row.value ?? ""),
+      enabled: row.enabled !== false,
+    };
+  });
+  return parts.length ? parts : [emptyPart()];
+}
+
 export function emptyRequest(name: string): ApiRequest {
   return {
     name,
@@ -115,7 +171,7 @@ export function emptyRequest(name: string): ApiRequest {
     url: "",
     query: [emptyPair()],
     headers: [emptyPair()],
-    body: { mode: "none", raw: "" },
+    body: emptyBody(),
     scripts: { pre: "", post: "" },
     auth: emptyAuth(),
   };

@@ -1,7 +1,9 @@
 import {
   ApiRequest,
   emptyAuth,
+  emptyBody,
   emptyPair,
+  emptyPart,
   HeaderPair,
   HttpMethod,
   isHttpMethod,
@@ -58,6 +60,14 @@ interface PostmanRequest {
     mode?: string;
     raw?: string;
     urlencoded?: Array<{ key?: string; value?: string }>;
+    formdata?: Array<{
+      key?: string;
+      value?: string;
+      src?: string | string[];
+      type?: string;
+      disabled?: boolean;
+    }>;
+    graphql?: { query?: string; variables?: string };
   };
   auth?: PostmanAuth;
 }
@@ -138,7 +148,7 @@ function walk(
           url: item.request,
           query: [emptyPair()],
           headers: [emptyPair()],
-          body: { mode: "none", raw: "" },
+          body: emptyBody(),
           scripts,
           auth: authFromPostman(auth, emptyAuth()),
         },
@@ -181,30 +191,47 @@ function toApiRequest(
     enabled: item.disabled !== true,
   }));
 
-  let mode: ApiRequest["body"]["mode"] = "none";
-  let raw = "";
+  const body = emptyBody();
   const bodyMode = request.body?.mode;
   switch (bodyMode) {
     case undefined:
     case "raw":
-      raw = request.body?.raw ?? "";
-      mode = raw ? guessRawMode(raw, headers) : "none";
+      body.raw = request.body?.raw ?? "";
+      body.mode = body.raw ? guessRawMode(body.raw, headers) : "none";
       break;
     case "urlencoded":
-      mode = "form";
-      raw = (request.body?.urlencoded ?? [])
+      body.mode = "form";
+      body.raw = (request.body?.urlencoded ?? [])
         .map((pair) => `${pair.key ?? ""}=${pair.value ?? ""}`)
         .join("&");
       break;
     case "formdata":
-    case "file":
+      body.mode = "multipart";
+      body.parts = (request.body?.formdata ?? []).map((item) => ({
+        key: item.key ?? "",
+        kind: item.type === "file" ? "file" : "text",
+        value:
+          item.type === "file"
+            ? String(Array.isArray(item.src) ? item.src[0] ?? "" : item.src ?? "")
+            : item.value ?? "",
+        enabled: item.disabled !== true,
+      }));
+      if (!body.parts.length) {
+        body.parts = [emptyPart()];
+      }
+      break;
     case "graphql":
-      raw = request.body?.raw ?? "";
-      mode = raw ? "text" : "none";
+      body.mode = "graphql";
+      body.graphqlQuery = request.body?.graphql?.query ?? request.body?.raw ?? "";
+      body.graphqlVariables = request.body?.graphql?.variables ?? "{}";
+      break;
+    case "file":
+      body.raw = request.body?.raw ?? "";
+      body.mode = body.raw ? "text" : "none";
       break;
     default:
-      raw = request.body?.raw ?? "";
-      mode = raw ? "text" : "none";
+      body.raw = request.body?.raw ?? "";
+      body.mode = body.raw ? "text" : "none";
       break;
   }
 
@@ -215,7 +242,7 @@ function toApiRequest(
     url,
     query: query.length ? query : [emptyPair()],
     headers: headers.length ? headers : [emptyPair()],
-    body: { mode, raw },
+    body,
     scripts,
     auth: authFromPostman(request.auth ?? inheritedAuth, emptyAuth()),
   };

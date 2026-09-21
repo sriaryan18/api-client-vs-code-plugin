@@ -1,6 +1,7 @@
 import {
   ApiRequest,
   emptyAuth,
+  emptyBody,
   emptyPair,
   HeaderPair,
   HttpMethod,
@@ -119,7 +120,7 @@ export function parseCurl(input: string): ApiRequest {
     url,
     query: [emptyPair()],
     headers: headers.length ? headers : [emptyPair()],
-    body: { mode: bodyMode, raw: rawBody },
+    body: { ...emptyBody(), mode: bodyMode, raw: rawBody },
     scripts: { pre: "", post: "" },
     auth: emptyAuth(),
   };

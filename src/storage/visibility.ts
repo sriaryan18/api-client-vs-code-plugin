@@ -70,6 +70,30 @@ export async function toggleCollectionVisibility(
   await setCollectionShown(name, !isCollectionVisible(name), allNames);
 }
 
+export async function renameVisibleCollection(
+  oldName: string,
+  newName: string
+): Promise<void> {
+  if (!oldName || oldName === newName) {
+    return;
+  }
+  const map = { ...readMap() };
+  let dirty = false;
+  for (const [key, list] of Object.entries(map)) {
+    if (!Array.isArray(list) || !list.includes(oldName)) {
+      continue;
+    }
+    map[key] = list.map((item) => (item === oldName ? newName : item));
+    dirty = true;
+  }
+  if (!dirty) {
+    return;
+  }
+  await vscode.workspace
+    .getConfiguration("apiClient")
+    .update(SETTING, map, vscode.ConfigurationTarget.Global);
+}
+
 function readMap(): Record<string, string[]> {
   const raw = vscode.workspace
     .getConfiguration("apiClient")
