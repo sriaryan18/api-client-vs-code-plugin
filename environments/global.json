@@ -1,0 +1,6 @@
+{
+  "name": "global",
+  "values": {
+    "baseUrl": "http://localhost:3000"
+  }
+}

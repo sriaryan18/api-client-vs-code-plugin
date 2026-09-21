@@ -1,0 +1,492 @@
+{
+  "name": "api-client",
+  "displayName": "API Client",
+  "description": "A local, file-first API client for VS Code. Import curl, manage collections, send requests.",
+  "version": "0.6.4",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "API Client",
+      "properties": {
+        "apiClient.root": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute folder where ALL collections live. This can be its own git repo. Leave empty to pick a folder on first use."
+        },
+        "apiClient.multipleTabs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open each request in its own tab. Turn off to reuse one request tab."
+        },
+        "apiClient.visibilityByRepo": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {},
+          "description": "For each repo path, which collection names to show. If a repo is missing, every collection is shown."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "apiClient",
+          "title": "API Client",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "apiClient": [
+        {
+          "id": "apiClient.collections",
+          "name": "Collections",
+          "icon": "media/icon.svg"
+        },
+        {
+          "id": "apiClient.visibility",
+          "name": "Shown in this repo"
+        },
+        {
+          "id": "apiClient.environments",
+          "name": "Environments"
+        },
+        {
+          "id": "apiClient.flows",
+          "name": "Flows"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "apiClient.collections",
+        "contents": "Pick a base folder for all collections. That folder can be its own git repo.\n[Set Collections Location](command:apiClient.setRoot)\n[New Collection](command:apiClient.newCollection)\n[Connect MCP](command:apiClient.connectMcp)"
+      },
+      {
+        "view": "apiClient.visibility",
+        "contents": "Tick which collections this repo should show. Unchecked collections stay hidden in Collections.\n[Choose collections](command:apiClient.chooseVisibleCollections)\n[Show all](command:apiClient.showAllCollections)"
+      },
+      {
+        "view": "apiClient.flows",
+        "contents": "A flow is a list of requests that run in order.\n[New Flow](command:apiClient.newFlow)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "apiClient.newCollection",
+        "title": "API Client: New Collection",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "apiClient.newFolder",
+        "title": "API Client: New Folder",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "apiClient.newRequest",
+        "title": "API Client: New Request",
+        "icon": "$(add)"
+      },
+      {
+        "command": "apiClient.setRoot",
+        "title": "API Client: Set Collections Location"
+      },
+      {
+        "command": "apiClient.importCurl",
+        "title": "API Client: Import Curl",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "apiClient.importPostman",
+        "title": "API Client: Import Postman Collection"
+      },
+      {
+        "command": "apiClient.exportCollection",
+        "title": "API Client: Export Collection",
+        "icon": "$(export)"
+      },
+      {
+        "command": "apiClient.refresh",
+        "title": "API Client: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "apiClient.openRequest",
+        "title": "API Client: Open Request"
+      },
+      {
+        "command": "apiClient.openRequestInNewTab",
+        "title": "API Client: Open in New Tab"
+      },
+      {
+        "command": "apiClient.sendActive",
+        "title": "API Client: Send Request"
+      },
+      {
+        "command": "apiClient.copyCurl",
+        "title": "API Client: Copy as Curl"
+      },
+      {
+        "command": "apiClient.duplicateRequest",
+        "title": "API Client: Duplicate Request"
+      },
+      {
+        "command": "apiClient.deleteRequest",
+        "title": "API Client: Delete Request"
+      },
+      {
+        "command": "apiClient.deleteCollection",
+        "title": "API Client: Delete Collection"
+      },
+      {
+        "command": "apiClient.deleteFolder",
+        "title": "API Client: Delete Folder"
+      },
+      {
+        "command": "apiClient.runCollection",
+        "title": "API Client: Run Collection",
+        "icon": "$(play)"
+      },
+      {
+        "command": "apiClient.editEnv",
+        "title": "API Client: Edit Environment",
+        "icon": "$(symbol-variable)"
+      },
+      {
+        "command": "apiClient.openEnv",
+        "title": "API Client: Open Environment"
+      },
+      {
+        "command": "apiClient.connectMcp",
+        "title": "API Client: Connect MCP to Cursor"
+      },
+      {
+        "command": "apiClient.quickOpen",
+        "title": "API Client: Quick Open Request"
+      },
+      {
+        "command": "apiClient.searchRequests",
+        "title": "API Client: Search Requests",
+        "icon": "$(search)"
+      },
+      {
+        "command": "apiClient.clearSearch",
+        "title": "API Client: Clear Search",
+        "icon": "$(close)"
+      },
+      {
+        "command": "apiClient.chooseVisibleCollections",
+        "title": "API Client: Choose Collections for This Repo",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "apiClient.showAllCollections",
+        "title": "API Client: Show All Collections",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "apiClient.toggleCollectionVisibility",
+        "title": "API Client: Show or Hide Collection in This Repo",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "apiClient.newFlow",
+        "title": "API Client: New Flow",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "apiClient.openFlow",
+        "title": "API Client: Open Flow"
+      },
+      {
+        "command": "apiClient.runFlow",
+        "title": "API Client: Run Flow",
+        "icon": "$(play)"
+      },
+      {
+        "command": "apiClient.deleteFlow",
+        "title": "API Client: Delete Flow"
+      },
+      {
+        "command": "apiClient.addToFlow",
+        "title": "API Client: Add to Flow"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "apiClient.sendActive",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "activeWebviewPanelId == 'apiClient.request'"
+      },
+      {
+        "command": "apiClient.copyCurl",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "activeWebviewPanelId == 'apiClient.request'"
+      },
+      {
+        "command": "apiClient.newRequest",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n"
+      },
+      {
+        "command": "apiClient.newCollection",
+        "key": "ctrl+alt+shift+n",
+        "mac": "cmd+alt+shift+n"
+      },
+      {
+        "command": "apiClient.newFolder",
+        "key": "ctrl+alt+shift+f",
+        "mac": "cmd+alt+shift+f"
+      },
+      {
+        "command": "apiClient.setRoot",
+        "key": "ctrl+alt+shift+l",
+        "mac": "cmd+alt+shift+l"
+      },
+      {
+        "command": "apiClient.importCurl",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i"
+      },
+      {
+        "command": "apiClient.runCollection",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r"
+      },
+      {
+        "command": "apiClient.quickOpen",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "apiClient.searchRequests",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f"
+      },
+      {
+        "command": "apiClient.editEnv",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e"
+      },
+      {
+        "command": "apiClient.duplicateRequest",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "activeWebviewPanelId == 'apiClient.request' || view == apiClient.collections"
+      },
+      {
+        "command": "apiClient.newFlow",
+        "key": "ctrl+alt+shift+w",
+        "mac": "cmd+alt+shift+w"
+      },
+      {
+        "command": "apiClient.runFlow",
+        "key": "ctrl+alt+shift+r",
+        "mac": "cmd+alt+shift+r"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "apiClient.searchRequests",
+          "when": "view == apiClient.collections",
+          "group": "navigation@0"
+        },
+        {
+          "command": "apiClient.clearSearch",
+          "when": "view == apiClient.collections && apiClient.hasSearch",
+          "group": "navigation@0"
+        },
+        {
+          "command": "apiClient.newCollection",
+          "when": "view == apiClient.collections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "apiClient.newFolder",
+          "when": "view == apiClient.collections",
+          "group": "navigation@2"
+        },
+        {
+          "command": "apiClient.newRequest",
+          "when": "view == apiClient.collections",
+          "group": "navigation@3"
+        },
+        {
+          "command": "apiClient.importCurl",
+          "when": "view == apiClient.collections",
+          "group": "navigation@4"
+        },
+        {
+          "command": "apiClient.runCollection",
+          "when": "view == apiClient.collections",
+          "group": "navigation@5"
+        },
+        {
+          "command": "apiClient.setRoot",
+          "when": "view == apiClient.collections",
+          "group": "navigation@6"
+        },
+        {
+          "command": "apiClient.refresh",
+          "when": "view == apiClient.collections",
+          "group": "navigation@7"
+        },
+        {
+          "command": "apiClient.chooseVisibleCollections",
+          "when": "view == apiClient.collections",
+          "group": "navigation@8"
+        },
+        {
+          "command": "apiClient.chooseVisibleCollections",
+          "when": "view == apiClient.visibility",
+          "group": "navigation@1"
+        },
+        {
+          "command": "apiClient.showAllCollections",
+          "when": "view == apiClient.visibility",
+          "group": "navigation@2"
+        },
+        {
+          "command": "apiClient.editEnv",
+          "when": "view == apiClient.environments",
+          "group": "navigation@1"
+        },
+        {
+          "command": "apiClient.newFlow",
+          "when": "view == apiClient.flows",
+          "group": "navigation@1"
+        },
+        {
+          "command": "apiClient.runFlow",
+          "when": "view == apiClient.flows",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "apiClient.newRequest",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "inline@1"
+        },
+        {
+          "command": "apiClient.newFolder",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "inline@2"
+        },
+        {
+          "command": "apiClient.runCollection",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "inline@3"
+        },
+        {
+          "command": "apiClient.runCollection",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "0_run"
+        },
+        {
+          "command": "apiClient.newFolder",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.newRequest",
+          "when": "view == apiClient.collections && viewItem =~ /collection|folder/",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.exportCollection",
+          "when": "view == apiClient.collections && viewItem == collection",
+          "group": "0_run"
+        },
+        {
+          "command": "apiClient.toggleCollectionVisibility",
+          "when": "view == apiClient.collections && viewItem == collection",
+          "group": "2_view"
+        },
+        {
+          "command": "apiClient.deleteCollection",
+          "when": "view == apiClient.collections && viewItem == collection",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.toggleCollectionVisibility",
+          "when": "view == apiClient.visibility && viewItem =~ /visibilityOn|visibilityOff/",
+          "group": "inline@1"
+        },
+        {
+          "command": "apiClient.deleteFolder",
+          "when": "view == apiClient.collections && viewItem == folder",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.openRequestInNewTab",
+          "when": "view == apiClient.collections && viewItem == request",
+          "group": "navigation@0"
+        },
+        {
+          "command": "apiClient.copyCurl",
+          "when": "view == apiClient.collections && viewItem == request",
+          "group": "0_run"
+        },
+        {
+          "command": "apiClient.duplicateRequest",
+          "when": "view == apiClient.collections && viewItem == request",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.deleteRequest",
+          "when": "view == apiClient.collections && viewItem == request",
+          "group": "1_edit"
+        },
+        {
+          "command": "apiClient.addToFlow",
+          "when": "view == apiClient.collections && viewItem == request",
+          "group": "0_run"
+        },
+        {
+          "command": "apiClient.runFlow",
+          "when": "view == apiClient.flows && viewItem == flow",
+          "group": "inline@1"
+        },
+        {
+          "command": "apiClient.runFlow",
+          "when": "view == apiClient.flows && viewItem == flow",
+          "group": "0_run"
+        },
+        {
+          "command": "apiClient.deleteFlow",
+          "when": "view == apiClient.flows && viewItem == flow",
+          "group": "1_edit"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --allow-missing-repository --skip-license",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0"
+  }
+}
