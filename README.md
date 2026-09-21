@@ -1,40 +1,70 @@
 # API Client
 
-A local API client for VS Code and Cursor. Collections live in one base folder you choose. That folder can be its own git repo.
+A local API client for VS Code and Cursor. Collections live in one folder you choose. That folder can be its own git repo.
 
-## First run
+Full lists:
 
-1. Reload Cursor
-2. Click **Set Collections Location** or create a collection
-3. Pick an existing folder, or create `~/api-collections`
-4. That folder is used for every collection. Git lives there, not in this plugin.
+- [All features](docs/features.md)
+- [All commands and keys](docs/commands.md)
 
-## Env
+## Run from this repo (dev)
 
-- **Global** — all collections
-- **Profile** (`local`, and others) — selected in the request bar
-- **Collection** — one collection only
+You need Node 18+ and Cursor or VS Code.
 
-Merge order: global, then profile, then collection.
+```bash
+cd /path/to/api-client-plugin
+npm install
+npm run compile
+```
 
-Open the **Environments** view or press the **Env** button.
+Then press **F5** in this repo (launch config **Run Extension**). A new window opens with the extension loaded.
 
-## Test runner
+To watch files while you edit:
 
-Run a collection or folder. You choose iterations and wait time. Results show avg / min / max and test counts.
+```bash
+npm run watch
+```
 
-## MCP for Cursor / Claude
+Keep that running, then press **F5** again after a compile.
 
-Run **API Client: Connect MCP to Cursor**, then reload Cursor.
+## Install the packaged extension
 
-Tools: `search_requests`, `list_collections`, `get_request`, `add_request`, `send_request`.
+```bash
+npm install
+npm run compile
+npx @vscode/vsce package --allow-missing-repository --skip-license
+cursor --install-extension api-client-0.6.6.vsix --force
+```
 
-## Keyboard
+Use `code` instead of `cursor` if you are in VS Code. Reload the window after install.
 
-| Action | Mac |
+The version in the `.vsix` name matches `package.json`.
+
+## First use
+
+1. Open the **API Client** icon in the left bar.
+2. Click **Set Collections Location** (or run that command from the palette).
+3. Pick a folder, or create `~/api-collections`.
+4. That folder holds every collection, env, and flow. Git belongs there, not in this plugin.
+
+Then:
+
+1. **New Collection**
+2. **New Request**
+3. Set a URL and press **Send** (`⌘↵` on Mac, `Ctrl+Enter` on Windows/Linux)
+
+## Settings
+
+| Setting | What it does |
 | --- | --- |
-| Send | ⌘↵ |
-| Env | ⌘⌥E |
-| Run collection | ⌘⌥R |
-| New collection | ⌘⌥⇧N |
-| Set location | ⌘⌥⇧L |
+| `apiClient.root` | Absolute folder for all collections. Empty means pick one on first use. |
+| `apiClient.multipleTabs` | Open each request in its own tab. Default is on. |
+| `apiClient.visibilityByRepo` | Which collections to show for each repo path. Missing path = show all. |
+
+## MCP
+
+1. Run **API Client: Connect MCP to Cursor**
+2. Reload Cursor
+3. Agents can search, send, edit env, and run flows
+
+See [features](docs/features.md#mcp) for the tool list.
