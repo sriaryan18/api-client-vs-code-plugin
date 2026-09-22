@@ -2,7 +2,7 @@
   "name": "api-client",
   "displayName": "API Client",
   "description": "A local, file-first API client for VS Code. Import curl, manage collections, send requests.",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "publisher": "local",
   "engines": {
     "vscode": "^1.90.0"

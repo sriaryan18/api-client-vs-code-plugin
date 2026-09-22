@@ -18,6 +18,7 @@ import {
   partsFromUnknown,
   RequestAuth,
 } from "../models";
+import { scriptWrites } from "../scripts/runScripts";
 import {
   COLLECTION_AUTH_FILE,
   COLLECTION_ENV_FILE,
@@ -543,35 +544,106 @@ export class FileStore {
     if (!Object.keys(changed).length) {
       return;
     }
-    const secretKeys = this.readSecrets().values;
-    const secretChanged: Record<string, string> = {};
-    const rest: Record<string, string> = {};
+    const writes = scriptWrites(after);
+    const secrets = this.readSecrets().values;
+    const collectionValues = collection ? this.readCollectionEnv(collection).values : {};
+    const profileValues = this.readNamedEnv(named).values;
+    const globalValues = this.readGlobalEnv().values;
+    const buckets: Record<EnvScope, Record<string, string>> = {
+      global: {},
+      profile: {},
+      collection: {},
+      secrets: {},
+    };
     for (const [key, value] of Object.entries(changed)) {
-      if (Object.prototype.hasOwnProperty.call(secretKeys, key)) {
-        secretChanged[key] = value;
-      } else {
-        rest[key] = value;
-      }
+      const dest = this.scriptEnvDest(
+        key,
+        writes[key],
+        {
+          secrets,
+          collection: collectionValues,
+          profile: profileValues,
+          global: globalValues,
+        },
+        collection ? "collection" : "profile"
+      );
+      buckets[dest][key] = value;
     }
-    if (Object.keys(secretChanged).length) {
+    if (Object.keys(buckets.secrets).length) {
       this.writeSecrets({
         name: "secrets",
-        values: { ...secretKeys, ...secretChanged },
+        values: { ...secrets, ...buckets.secrets },
       });
     }
-    if (!Object.keys(rest).length) {
-      return;
-    }
-    if (collection) {
-      const current = this.readCollectionEnv(collection);
-      this.writeCollectionEnv(collection, {
-        name: collection,
-        values: { ...current.values, ...rest },
+    if (Object.keys(buckets.global).length) {
+      this.writeGlobalEnv({
+        name: "global",
+        values: { ...globalValues, ...buckets.global },
       });
+      this.unshadowCollectionKeys(collection, Object.keys(buckets.global));
+    }
+    if (Object.keys(buckets.profile).length) {
+      this.writeNamedEnv({
+        name: named,
+        values: { ...profileValues, ...buckets.profile },
+      });
+    }
+    if (Object.keys(buckets.collection).length) {
+      if (!collection) {
+        this.writeNamedEnv({
+          name: named,
+          values: { ...this.readNamedEnv(named).values, ...buckets.collection },
+        });
+      } else {
+        this.writeCollectionEnv(collection, {
+          name: collection,
+          values: { ...this.readCollectionEnv(collection).values, ...buckets.collection },
+        });
+      }
+    }
+  }
+
+  private scriptEnvDest(
+    key: string,
+    written: EnvScope | undefined,
+    scopes: Record<EnvScope, Record<string, string>>,
+    fallback: EnvScope
+  ): EnvScope {
+    if (written) {
+      return written;
+    }
+    if (Object.prototype.hasOwnProperty.call(scopes.secrets, key)) {
+      return "secrets";
+    }
+    if (Object.prototype.hasOwnProperty.call(scopes.collection, key)) {
+      return "collection";
+    }
+    if (Object.prototype.hasOwnProperty.call(scopes.profile, key)) {
+      return "profile";
+    }
+    if (Object.prototype.hasOwnProperty.call(scopes.global, key)) {
+      return "global";
+    }
+    return fallback;
+  }
+
+  private unshadowCollectionKeys(collection: string, keys: string[]): void {
+    if (!collection || !keys.length) {
       return;
     }
-    const current = this.readNamedEnv(named);
-    this.writeNamedEnv({ name: named, values: { ...current.values, ...rest } });
+    const current = this.readCollectionEnv(collection);
+    const values = { ...current.values };
+    let dirty = false;
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        delete values[key];
+        dirty = true;
+      }
+    }
+    if (!dirty) {
+      return;
+    }
+    this.writeCollectionEnv(collection, { name: collection, values });
   }
 
   listFlows(): Array<{ name: string; filePath: string; flow: ApiFlow }> {

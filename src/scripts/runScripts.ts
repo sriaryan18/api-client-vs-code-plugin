@@ -1,5 +1,17 @@
 import * as vm from "vm";
 import { SendResult } from "../http/sendRequest";
+import { EnvScope } from "../models";
+
+const writeMap = new WeakMap<object, Record<string, EnvScope>>();
+
+export function scriptWrites(env: Record<string, string>): Record<string, EnvScope> {
+  let writes = writeMap.get(env);
+  if (!writes) {
+    writes = {};
+    writeMap.set(env, writes);
+  }
+  return writes;
+}
 
 export interface TestResult {
   name: string;
@@ -75,20 +87,35 @@ function scriptGlobals(
   env: Record<string, string>,
   extras?: Record<string, unknown>
 ): Record<string, unknown> {
-  const setEnv = (key: string, value: unknown) => {
-    env[String(key)] = value == null ? "" : String(value);
+  const writes = scriptWrites(env);
+  const getEnv = (key: string) => env[String(key)];
+  const setEnv = (key: string, value: unknown, scope?: unknown) => {
+    const name = String(key);
+    env[name] = value == null ? "" : String(value);
+    if (scope != null && String(scope).trim()) {
+      writes[name] = parseScriptScope(scope);
+    }
+  };
+  const setGlobal = (key: string, value: unknown) => {
+    setEnv(key, value, "global");
   };
   const globals: Record<string, unknown> = {
     env,
+    getEnv,
     setEnv,
+    setGlobal,
     pm: {
       environment: {
         set: setEnv,
-        get: (key: string) => env[String(key)],
+        get: getEnv,
       },
       variables: {
         set: setEnv,
-        get: (key: string) => env[String(key)],
+        get: getEnv,
+      },
+      globals: {
+        set: setGlobal,
+        get: getEnv,
       },
     },
     console: {
@@ -118,6 +145,28 @@ function scriptGlobals(
     },
   });
   return globals;
+}
+
+function parseScriptScope(scope: unknown): EnvScope {
+  const name = String(scope).trim().toLowerCase();
+  switch (name) {
+    case "global":
+    case "globals":
+      return "global";
+    case "profile":
+    case "environment":
+    case "local":
+      return "profile";
+    case "collection":
+      return "collection";
+    case "secrets":
+    case "secret":
+      return "secrets";
+    default:
+      throw new Error(
+        `Unknown env scope "${String(scope)}". Use global, collection, profile, or secrets.`
+      );
+  }
 }
 
 function fmt(value: unknown): string {

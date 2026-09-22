@@ -74,17 +74,24 @@ Use `{{name}}` in the URL, headers, body, GraphQL, and scripts. Known names high
 
 **Local secrets** win over everything and are not committed.
 
-Scripts can call `setEnv('key', value)`. If that key already lives in secrets, it stays in secrets. Otherwise it is saved on the collection (or the profile if there is no collection).
+Scripts can set env values:
+
+- `setGlobal('key', value)` — Global. Every collection can use `{{key}}`.
+- `setEnv('key', value, 'global')` — same as `setGlobal`.
+- `setEnv('key', value)` — updates the place that key already lives (secrets, collection, profile, or global). A new key is saved on the collection.
+
+If a collection also has the same key, that collection value used to hide Global. Writing with `setGlobal` now removes that collection copy so Global can be read.
 
 ## Scripts
 
 **Pre-request** runs before send. **Tests** run after send. You get:
 
-- `setEnv(key, value)`
+- `setGlobal(key, value)` / `setEnv(key, value, scope)`
+- `getEnv(key)`
 - `response` (status, body, headers)
 - `response.json` as an object when the body is JSON
 - `test` / `expect`
-- `pm.environment` / `pm.test` (Postman-style)
+- `pm.globals` / `pm.environment` / `pm.test` (Postman-style)
 
 ## Search
 

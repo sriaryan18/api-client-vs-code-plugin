@@ -288,6 +288,7 @@ class RequestTab {
       ];
     }
     store?.persistScriptEnv(collection, this.activeEnv, before, env);
+    await this.pushEnv();
     await this.panel.webview.postMessage({ type: "result", result, tests });
   }
 
@@ -466,13 +467,13 @@ function requestHtml(
         <label>Pre-request
           <div class="hl-wrap hl-area">
             <div class="hl-mirror" id="pre-mirror"></div>
-            <textarea id="pre" placeholder="setEnv('ready', '1')" spellcheck="false"></textarea>
+            <textarea id="pre" placeholder="setGlobal('ready', '1')" spellcheck="false"></textarea>
           </div>
         </label>
         <label>Tests
           <div class="hl-wrap hl-area">
             <div class="hl-mirror" id="post-mirror"></div>
-            <textarea id="post" placeholder="setEnv('dealerToken', response.json.access_token)" spellcheck="false"></textarea>
+            <textarea id="post" placeholder="setGlobal('dealerToken', response.json.access_token)" spellcheck="false"></textarea>
           </div>
         </label>
       </section>

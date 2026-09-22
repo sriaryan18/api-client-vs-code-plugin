@@ -186,7 +186,7 @@ function highlightJs(text) {
     { re: /`(?:\\.|[^`\\])*`/y, cls: "tok-str" },
     { re: /'(?:\\.|[^'\\])*'/y, cls: "tok-str" },
     { re: /"(?:\\.|[^"\\])*"/y, cls: "tok-str" },
-    { re: /\b(?:setEnv|pm|test|expect|response)\b/y, cls: "tok-fn" },
+    { re: /\b(?:setEnv|setGlobal|getEnv|pm|test|expect|response)\b/y, cls: "tok-fn" },
     { re: /\b(?:const|let|var|function|return|if|else|for|while|of|in|new|typeof|await|async|try|catch|throw|true|false|null|undefined)\b/y, cls: "tok-kw" },
     { re: /-?\d+(?:\.\d+)?/y, cls: "tok-num" },
     { re: /[{}\[\]().,;=+\-*/<>!&|?:]/y, cls: "tok-punc" },
