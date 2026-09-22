@@ -346,23 +346,28 @@ function requestHtml(
 <body>
   <div class="app">
     <header class="topbar">
-      <input id="name" class="name" type="text" placeholder="Request name" />
-      <input id="description" class="note" type="text" placeholder="Description (optional)" />
-      <div class="crumb" id="crumb"></div>
-      <div class="spacer"></div>
+      <div class="title-block">
+        <input id="name" class="name" type="text" placeholder="Request name" />
+        <input id="description" class="note" type="text" placeholder="Description" />
+        <div class="crumb" id="crumb"></div>
+      </div>
       <div class="toolbar">
-        <select id="env" title="Environment profile"></select>
-        <button type="button" id="edit-env" class="link">Edit env</button>
-        <button type="button" id="copy-curl" class="link">Copy curl</button>
+        <label class="env-pick">
+          <select id="env" title="Environment profile"></select>
+        </label>
+        <button type="button" id="edit-env" class="ghost">Edit</button>
+        <button type="button" id="copy-curl" class="ghost">Curl</button>
       </div>
     </header>
-    <div class="composer">
-      <select id="method" class="method"></select>
-      <div class="hl-wrap" id="url-wrap">
-        <div class="hl-mirror" id="url-mirror"></div>
-        <input id="url" type="text" spellcheck="false" placeholder="{{baseUrl}}/path" />
+    <div class="composer-wrap">
+      <div class="composer">
+        <select id="method" class="method"></select>
+        <div class="hl-wrap" id="url-wrap">
+          <div class="hl-mirror" id="url-mirror"></div>
+          <input id="url" type="text" spellcheck="false" placeholder="{{baseUrl}}/path" />
+        </div>
+        <button id="send" type="button">Send</button>
       </div>
-      <button id="send" type="button">Send</button>
     </div>
     <div class="workspace">
     <section class="editor">
@@ -374,15 +379,13 @@ function requestHtml(
         <button type="button" data-tab="graphql">GraphQL</button>
         <button type="button" data-tab="scripts">Scripts</button>
       </div>
-      <section id="tab-params" class="tab-page">
-        <div class="card">
-          <div class="card-head"><h3>Query params</h3><button type="button" id="add-query" class="link">Add</button></div>
-          <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
-          <div id="query" class="pairs"></div>
-        </div>
+      <section id="tab-params" class="tab-page flat">
+        <div class="section-head"><span>Query params</span><button type="button" id="add-query" class="link">Add</button></div>
+        <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
+        <div id="query" class="pairs"></div>
       </section>
       <section id="tab-auth" class="tab-page hidden">
-        <div class="card auth-page">
+        <div class="auth-page">
           <label>Type
             <select id="auth-type">
               <option value="inherit">Inherit from collection</option>
@@ -411,22 +414,16 @@ function requestHtml(
           </div>
         </div>
       </section>
-      <section id="tab-headers" class="tab-page hidden">
-        <div class="card">
-          <div class="card-head"><h3>Default headers</h3><button type="button" id="add-default-header" class="link">Add</button></div>
-          <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
-          <div id="default-headers" class="pairs"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>Collection headers</h3><button type="button" id="add-collection-header" class="link">Add</button></div>
-          <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
-          <div id="collection-headers" class="pairs"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>This request</h3><button type="button" id="add-header" class="link">Add</button></div>
-          <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
-          <div id="headers" class="pairs"></div>
-        </div>
+      <section id="tab-headers" class="tab-page hidden flat">
+        <div class="section-head"><span>Default headers</span><button type="button" id="add-default-header" class="link">Add</button></div>
+        <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
+        <div id="default-headers" class="pairs"></div>
+        <div class="section-head"><span>Collection headers</span><button type="button" id="add-collection-header" class="link">Add</button></div>
+        <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
+        <div id="collection-headers" class="pairs"></div>
+        <div class="section-head"><span>This request</span><button type="button" id="add-header" class="link">Add</button></div>
+        <div class="table-head"><span></span><span>Key</span><span>Value</span><span></span></div>
+        <div id="headers" class="pairs"></div>
       </section>
       <section id="tab-body" class="tab-page hidden">
         <div class="body-tools">
@@ -466,13 +463,13 @@ function requestHtml(
         </div>
       </section>
       <section id="tab-scripts" class="tab-page hidden scripts">
-        <label>Pre-request — before Send
+        <label>Pre-request
           <div class="hl-wrap hl-area">
             <div class="hl-mirror" id="pre-mirror"></div>
             <textarea id="pre" placeholder="setEnv('ready', '1')" spellcheck="false"></textarea>
           </div>
         </label>
-        <label>Tests — after Send, response is here
+        <label>Tests
           <div class="hl-wrap hl-area">
             <div class="hl-mirror" id="post-mirror"></div>
             <textarea id="post" placeholder="setEnv('dealerToken', response.json.access_token)" spellcheck="false"></textarea>
@@ -482,15 +479,17 @@ function requestHtml(
     </section>
     <section class="response">
       <div class="response-bar">
-        <span id="status-chip" class="chip idle">Idle</span>
-        <span id="meta"></span>
         <div class="tabs" id="res-tabs">
           <button type="button" data-restab="body" class="active">Body</button>
           <button type="button" data-restab="headers">Headers</button>
           <button type="button" data-restab="tests">Tests</button>
         </div>
+        <div class="res-meta">
+          <span id="status-chip" class="chip idle"></span>
+          <span id="meta"></span>
+        </div>
       </div>
-      <pre id="res-body" class="res-page code-view"></pre>
+      <pre id="res-body" class="res-page code-view is-empty">Send to see the response</pre>
       <pre id="res-headers" class="res-page code-view hidden"></pre>
       <div id="res-tests" class="res-page tests-view hidden"></div>
     </section>

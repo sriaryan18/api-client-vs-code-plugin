@@ -250,6 +250,11 @@ function highlightCode(text, lang) {
   }
 }
 
+function setResponseBody(html, empty) {
+  resBodyEl.classList.toggle("is-empty", Boolean(empty));
+  resBodyEl.innerHTML = empty ? "Send to see the response" : html;
+}
+
 function renderTests(tests) {
   if (!tests.length) {
     return `<div class="test-empty">No tests. Add them in Scripts.</div>`;
@@ -314,25 +319,26 @@ function bindEnvHover(input) {
   input.addEventListener("mouseleave", hideEnvTip);
 }
 
+function unlockFields() {
+  document.querySelectorAll("input, textarea, select").forEach((field) => {
+    field.style.pointerEvents = "auto";
+    field.removeAttribute("readonly");
+    if (field !== sendEl) {
+      field.disabled = false;
+    }
+  });
+}
+
 function bindHighlightWrap(wrap) {
   const field = wrap.querySelector("input, textarea");
   if (!field) {
     return;
   }
-  wrap.addEventListener("mousedown", (event) => {
-    if (event.target.closest(".var-ok, .var-miss")) {
-      return;
-    }
-    field.style.pointerEvents = "auto";
+  wrap.addEventListener("mousedown", () => {
+    unlockFields();
     field.focus();
   });
-  field.addEventListener("focus", () => {
-    field.style.pointerEvents = "auto";
-  });
-  field.addEventListener("blur", () => {
-    field.style.pointerEvents = "";
-    hideEnvTip();
-  });
+  field.addEventListener("blur", hideEnvTip);
 }
 
 function bodyLang() {
@@ -414,10 +420,17 @@ function renderPairs(root, pairs) {
   );
 }
 
+let lastBodyMode = "json";
+
 function setReqTab(name) {
   if (name === "graphql") {
+    if (bodyModeEl.value !== "graphql") {
+      lastBodyMode = bodyModeEl.value === "none" ? "json" : bodyModeEl.value;
+    }
     bodyModeEl.value = "graphql";
     name = "body";
+  } else if (name === "body" && bodyModeEl.value === "graphql") {
+    bodyModeEl.value = lastBodyMode || "json";
   }
   ["params", "auth", "headers", "body", "scripts"].forEach((tab) => {
     document.getElementById(`tab-${tab}`).classList.toggle("hidden", tab !== name);
@@ -688,7 +701,12 @@ authTypeEl.addEventListener("change", () => {
 [urlEl, bodyEl, gqlQueryEl, gqlVarsEl, preEl, postEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl].forEach(bindEnvHover);
 document.querySelectorAll(".hl-wrap").forEach(bindHighlightWrap);
 
-bodyModeEl.addEventListener("change", syncBodyUi);
+bodyModeEl.addEventListener("change", () => {
+  if (bodyModeEl.value !== "graphql") {
+    lastBodyMode = bodyModeEl.value === "none" ? "json" : bodyModeEl.value;
+  }
+  syncBodyUi();
+});
 [methodEl, urlEl, nameEl, descriptionEl, bodyModeEl, bodyEl, gqlQueryEl, gqlVarsEl, preEl, postEl, authTokenEl, authUserEl, authPassEl, authKeyEl, authValueEl, authAddToEl].forEach((el) => {
   el.addEventListener("input", () => {
     scheduleSave();
@@ -763,6 +781,7 @@ window.addEventListener("message", (event) => {
       row.querySelector(".v").value = message.path || "";
       scheduleSave();
     }
+    unlockFields();
     return;
   }
   if (message.type === "load") {
@@ -794,14 +813,15 @@ window.addEventListener("message", (event) => {
       envEl.appendChild(option);
     });
     crumbEl.textContent = (message.folder || message.collection || "").replaceAll("/", " / ");
-    resBodyEl.innerHTML = "";
+    setResponseBody("", true);
     resHeadersEl.innerHTML = "";
     resTestsEl.innerHTML = "";
     chipEl.className = "chip idle";
-    chipEl.textContent = "Idle";
+    chipEl.textContent = "";
     metaEl.textContent = "";
     paintMethod();
     paintHighlights();
+    unlockFields();
     urlEl.focus();
     return;
   }
@@ -813,10 +833,11 @@ window.addEventListener("message", (event) => {
       chipEl.className = "chip err";
       chipEl.textContent = "ERR";
       metaEl.textContent = `${result.timeMs} ms`;
-      resBodyEl.innerHTML = `<span class="tok tok-err">${escapeHtml(result.error)}</span>`;
+      setResponseBody(`<span class="tok tok-err">${escapeHtml(result.error)}</span>`, false);
       resHeadersEl.innerHTML = "";
       resTestsEl.innerHTML = renderTests(tests);
       setResTab("body");
+      unlockFields();
       return;
     }
     const cls = result.status >= 500 ? "s5" : result.status >= 400 ? "s4" : result.status >= 300 ? "s3" : "s2";
@@ -825,9 +846,9 @@ window.addEventListener("message", (event) => {
     metaEl.textContent = `${result.timeMs} ms · ${sizeLabel(result.sizeBytes)}${
       tests.length ? ` · ${tests.filter((test) => test.passed).length}/${tests.length} tests` : ""
     }`;
-    resBodyEl.innerHTML = highlightCode(
-      result.body || "",
-      looksJson(result.body) ? "json" : "text"
+    setResponseBody(
+      highlightCode(result.body || "", looksJson(result.body) ? "json" : "text"),
+      false
     );
     resHeadersEl.innerHTML = highlightHeaders(
       (result.headers || [])
@@ -840,6 +861,7 @@ window.addEventListener("message", (event) => {
     } else {
       setResTab("body");
     }
+    unlockFields();
   }
 });
 
@@ -866,5 +888,10 @@ window.addEventListener("keydown", (event) => {
     setReqTab(map[event.key]);
   }
 });
+
+document.addEventListener("pointerdown", unlockFields, true);
+window.addEventListener("focus", unlockFields);
+document.addEventListener("visibilitychange", unlockFields);
+unlockFields();
 
 vscode.postMessage({ type: "ready" });

@@ -171,12 +171,15 @@ export class FlowPanel {
 <body>
   <div class="app env-app">
     <header class="topbar">
-      <input id="name" class="name" type="text" placeholder="Flow name" />
-      <div class="crumb">Requests run in order. Values set in Tests pass to the next step.</div>
-      <div class="spacer"></div>
+      <div class="title-block">
+        <input id="name" class="name" type="text" placeholder="Flow name" />
+        <div class="crumb">Steps run in order. Test env changes pass to the next step.</div>
+      </div>
       <div class="toolbar">
-        <select id="env"></select>
-        <button type="button" id="run" class="primary">Run flow</button>
+        <label class="env-pick">Env
+          <select id="env"></select>
+        </label>
+        <button type="button" id="run" class="primary">Run</button>
       </div>
     </header>
     <section class="page-body flow-layout">

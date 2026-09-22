@@ -33,7 +33,7 @@ Keep that running, then press **F5** again after a compile.
 npm install
 npm run compile
 npx @vscode/vsce package --allow-missing-repository --skip-license
-cursor --install-extension api-client-0.6.6.vsix --force
+cursor --install-extension api-client-0.6.12.vsix --force
 ```
 
 Use `code` instead of `cursor` if you are in VS Code. Reload the window after install.

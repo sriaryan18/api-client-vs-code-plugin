@@ -150,7 +150,9 @@ export class EnvPanel {
 <body>
   <div class="app env-app">
     <header class="topbar">
-      <strong id="title">Environment</strong>
+      <div class="title-block">
+        <strong id="title" class="page-title">Environment</strong>
+      </div>
       <div class="spacer"></div>
       <div class="toolbar">
         <button type="button" id="add" class="link">Add variable</button>
